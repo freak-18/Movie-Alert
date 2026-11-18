@@ -267,6 +267,29 @@ def movie_has_showtimes(page_html, cfg):
     return has_time and not blocked
 
 
+
+def debug_page_evidence(page_html, cfg, venue):
+    """Print limited page text around the movie title for false-positive diagnosis."""
+    text = html.unescape(re.sub(r"<[^>]+>", " ", page_html))
+    text = re.sub(r"\s+", " ", text)
+    lower = text.lower()
+    movie = re.sub(r"\s+", " ", cfg["movie"]).strip().lower()
+    pos = lower.find(movie)
+    print(f"[debug] {venue.get('label')} ({venue.get('code')}): page_chars={len(page_html)}, title_found={pos >= 0}", flush=True)
+    if pos >= 0:
+        start = max(0, pos - 250)
+        end = min(len(text), pos + 1400)
+        print(f"[debug] movie_context: {text[start:end]}", flush=True)
+    # Show date-like markers present in the response, without dumping the full page.
+    date_patterns = [r"17\s*(?:Dec|December)\s*2026", r"2026[-/]12[-/]17", r"17-12-2026", r"17/12/2026"]
+    found = []
+    for pattern in date_patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            found.append(text[max(0, match.start()-100):min(len(text), match.end()+180)])
+    print(f"[debug] requested_date_markers={len(found)}", flush=True)
+    for snippet in found[:4]:
+        print(f"[debug] date_context: {snippet}", flush=True)
+
 def main():
     cfg = load_config()
     label = f"{cfg['movie']} @ {cfg['requested_date']}"
@@ -306,6 +329,8 @@ def main():
                 print(f"[venue] unexpected response (possibly blocked/error page): {venue['label']} ({code})", flush=True)
                 continue
             checked += 1
+            if code in {"BWCB", "PBMC"}:
+                debug_page_evidence(page_html, cfg, venue)
             if movie_has_showtimes(page_html, cfg):
                 open_now[code] = {**venue, "url": url}
                 print(f"[venue] possible booking match: {venue['label']} ({code})", flush=True)
@@ -315,6 +340,10 @@ def main():
             errors += 1
             print(f"[venue] check failed for {venue['label']} ({code}): {exc}", flush=True)
         time.sleep(float(cfg["request_delay_seconds"]))
+
+    # This diagnostic build must never send alerts or modify state.json.
+    print(f"[{label}] DIAGNOSTIC ONLY: state.json unchanged; no Telegram alerts sent.", flush=True)
+    return 0 if checked else 1
 
     if not state.get("initialized"):
         if checked == 0:
