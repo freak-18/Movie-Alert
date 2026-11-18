@@ -432,6 +432,9 @@ def main():
                 continue
             checked += 1
             is_open, active_times = movie_has_showtimes(page_html, cfg)
+            # Temporary diagnostics for the two venues that produced false alerts.
+            if code in {"KARP", "PFSC"}:
+                debug_page_evidence(page_html, cfg, venue)
             if is_open:
                 open_now[code] = {**venue, "url": url, "showtimes": active_times}
                 print(f"[venue] BOOKABLE: {venue['label']} ({code}) — {', '.join(active_times)}", flush=True)
