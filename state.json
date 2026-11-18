@@ -6,7 +6,10 @@
       "slug": "kg-cinemas-coimbatore",
       "code": "KGCM",
       "city_path": "coim",
-      "url": "https://in.bookmyshow.com/cinemas/coim/kg-cinemas-coimbatore/buytickets/KGCM/20261217"
+      "url": "https://in.bookmyshow.com/cinemas/coim/kg-cinemas-coimbatore/buytickets/KGCM/20261217",
+      "showtimes": [
+        "Book 01:00 PM"
+      ]
     },
     "KGNR": {
       "label": "Karpagam Grandplex",
@@ -20,8 +23,44 @@
       "slug": "pvr-brookefields-mall-coimbatore",
       "code": "PBMC",
       "city_path": "coim",
-      "url": "https://in.bookmyshow.com/cinemas/coim/pvr-brookefields-mall-coimbatore/buytickets/PBMC/20261217"
+      "url": "https://in.bookmyshow.com/cinemas/coim/pvr-brookefields-mall-coimbatore/buytickets/PBMC/20261217",
+      "showtimes": [
+        "Book 01:05 PM",
+        "Book 04:35 PM",
+        "Book 08:05 PM",
+        "Book 11:30 PM"
+      ]
+    },
+    "PFSC": {
+      "label": "PVR Alveal Fun Savvy Mall",
+      "slug": "pvr-alveal-fun-savvy-mall-coimbatore",
+      "code": "PFSC",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/pvr-alveal-fun-savvy-mall-coimbatore/buytickets/PFSC/20261217",
+      "showtimes": [
+        "Book 06:25 PM",
+        "Book 10:25 PM",
+        "Book 10:45 PM",
+        "Book 06:40 PM",
+        "Book 07:05 PM",
+        "Book 06:40 PM",
+        "Book 06:55 PM",
+        "Book 10:00 PM",
+        "Book 10:20 PM",
+        "Book 11:00 PM"
+      ]
+    },
+    "KARP": {
+      "label": "Karpagam Theatres",
+      "slug": "karpagam-theatres-4k-dolby-atmos-coimbatore",
+      "code": "KARP",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/karpagam-theatres-4k-dolby-atmos-coimbatore/buytickets/KARP/20261217",
+      "showtimes": [
+        "Book 06:45 PM",
+        "Book 10:45 PM"
+      ]
     }
   },
-  "checked_at": 1794999329
+  "checked_at": 1795001666
 }
