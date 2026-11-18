@@ -15,13 +15,6 @@
       "city_path": "coimbatore",
       "url": "https://in.bookmyshow.com/cinemas/coimbatore/karpagam-grandplex-sundarapuram/buytickets/KGNR/20261217"
     },
-    "BWCB": {
-      "label": "Broadway Cinemas",
-      "slug": "broadway-cinemas-coimbatore",
-      "code": "BWCB",
-      "city_path": "coim",
-      "url": "https://in.bookmyshow.com/cinemas/coim/broadway-cinemas-coimbatore/buytickets/BWCB/20261217"
-    },
     "PBMC": {
       "label": "PVR Brookefields Mall",
       "slug": "pvr-brookefields-mall-coimbatore",
