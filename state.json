@@ -1,4 +1,34 @@
 {
-  "available": true,
-  "checked_at": 1794996147
+  "initialized": true,
+  "venues": {
+    "KGCM": {
+      "label": "KG Cinemas",
+      "slug": "kg-cinemas-coimbatore",
+      "code": "KGCM",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/kg-cinemas-coimbatore/buytickets/KGCM/20261217"
+    },
+    "KGNR": {
+      "label": "Karpagam Grandplex",
+      "slug": "karpagam-grandplex-sundarapuram",
+      "code": "KGNR",
+      "city_path": "coimbatore",
+      "url": "https://in.bookmyshow.com/cinemas/coimbatore/karpagam-grandplex-sundarapuram/buytickets/KGNR/20261217"
+    },
+    "BWCB": {
+      "label": "Broadway Cinemas",
+      "slug": "broadway-cinemas-coimbatore",
+      "code": "BWCB",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/broadway-cinemas-coimbatore/buytickets/BWCB/20261217"
+    },
+    "PBMC": {
+      "label": "PVR Brookefields Mall",
+      "slug": "pvr-brookefields-mall-coimbatore",
+      "code": "PBMC",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/pvr-brookefields-mall-coimbatore/buytickets/PBMC/20261217"
+    }
+  },
+  "checked_at": 1794998554
 }
