@@ -3,7 +3,7 @@
 
 Discovers Coimbatore cinema pages from BookMyShow's venue directory, resolves
 venue codes from cinema pages, checks each cinema's requested-date page, and
-sends one Telegram alert when the configured movie first appears with showtimes.
+sends one Telegram alert when the configured movie has at least one enabled Book button.
 
 Important: BookMyShow markup and anti-bot responses can change. The script logs
 what it discovers and deliberately does not initialize state when discovery
@@ -252,20 +252,106 @@ def is_expected_venue_page(page_html, venue):
     return any(token in text for token in tokens)
 
 
-def movie_has_showtimes(page_html, cfg):
-    """Conservative signal: movie title plus one or more showtime-like entries."""
-    text = html.unescape(re.sub(r"<[^>]+>", " ", page_html))
-    text = re.sub(r"\s+", " ", text).lower()
-    movie = re.sub(r"\s+", " ", cfg["movie"]).strip().lower()
-    movie_pos = text.find(movie)
-    if movie_pos < 0:
-        return False
-    # Require a showtime near the movie title, not merely elsewhere on the page.
-    nearby = text[movie_pos:movie_pos + 1000]
-    has_time = bool(re.search(r"\b(?:0?[1-9]|1[0-2]):[0-5]\d\s*(?:am|pm)\b", nearby))
-    blocked = any(term in nearby for term in ("notify me", "coming soon"))
-    return has_time and not blocked
+class HtmlNode:
+    """Small in-memory HTML tree used to inspect a movie card's showtime buttons."""
+    def __init__(self, tag="document", attrs=None, parent=None):
+        self.tag = tag
+        self.attrs = dict(attrs or [])
+        self.parent = parent
+        self.children = []
+        self.parts = []
 
+    def text_content(self):
+        bits = list(self.parts)
+        for child in self.children:
+            bits.append(child.text_content())
+        return " ".join(x for x in bits if x)
+
+
+class BookingMarkupParser(HTMLParser):
+    VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = HtmlNode()
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag, attrs):
+        node = HtmlNode(tag, attrs, self.stack[-1])
+        self.stack[-1].children.append(node)
+        if tag.lower() not in self.VOID_TAGS:
+            self.stack.append(node)
+
+    def handle_startendtag(self, tag, attrs):
+        node = HtmlNode(tag, attrs, self.stack[-1])
+        self.stack[-1].children.append(node)
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index].tag.lower() == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        if data and data.strip():
+            self.stack[-1].parts.append(data.strip())
+
+
+def _walk(node):
+    yield node
+    for child in node.children:
+        yield from _walk(child)
+
+
+def _norm_text(value):
+    return re.sub(r"\s+", " ", html.unescape(value or "")).strip().casefold()
+
+
+def movie_has_showtimes(page_html, cfg):
+    """Return true only when the requested movie card has an enabled Book button.
+
+    BookMyShow's page URL is already scoped to the requested date. Within that
+    page, identify the movie title anchor and inspect its containing card for
+    enabled role=button elements labelled 'Book <time>'. Disabled buttons
+    (aria-disabled=true or tabindex=-1) are deliberately ignored.
+    """
+    parser = BookingMarkupParser()
+    parser.feed(page_html)
+    movie = _norm_text(cfg["movie"])
+    title_anchors = []
+    for node in _walk(parser.root):
+        if node.tag.lower() == "a" and movie in _norm_text(node.text_content()):
+            title_anchors.append(node)
+
+    if not title_anchors:
+        return False, []
+
+    # Prefer the movie title link that belongs to a card containing showtime
+    # buttons. This avoids matching the footer's generic movie listing.
+    time_re = re.compile(r"^Book\s+(?:0?[1-9]|1[0-2]):[0-5]\d\s*(?:AM|PM)$", re.I)
+    for anchor in title_anchors:
+        ancestor = anchor.parent
+        while ancestor is not None:
+            buttons = []
+            for child in _walk(ancestor):
+                attrs = child.attrs
+                label = attrs.get("aria-label", "")
+                if child.tag.lower() not in {"div", "button"}:
+                    continue
+                if attrs.get("role", "").lower() != "button" and child.tag.lower() != "button":
+                    continue
+                if not time_re.match(label.strip()):
+                    continue
+                disabled = attrs.get("aria-disabled", "").lower() == "true"
+                tabindex = attrs.get("tabindex")
+                disabled = disabled or tabindex == "-1" or "disabled" in attrs
+                if not disabled:
+                    buttons.append(label.strip())
+            if buttons:
+                return True, buttons
+            ancestor = ancestor.parent
+    return False, []
 
 
 def debug_page_evidence(page_html, cfg, venue):
@@ -325,12 +411,7 @@ def main():
     venues = discover_venues(directory_html, cfg, session)
     print(f"[{label}] discovered {len(venues)} cinema venue(s)", flush=True)
     if not venues:
-        print(
-            "[discovery] no venue codes were extracted. BMS directory markup may "
-            "have changed or ScraperAPI may have returned a challenge page. "
-            "State was not initialized.",
-            flush=True,
-        )
+        print("[discovery] no venue codes extracted; state was not changed.", flush=True)
         return 1
 
     state = load_json(STATE_PATH, {}) or {}
@@ -350,29 +431,25 @@ def main():
                 print(f"[venue] unexpected response (possibly blocked/error page): {venue['label']} ({code})", flush=True)
                 continue
             checked += 1
-            if code in {"BWCB", "PBMC"}:
-                debug_page_evidence(page_html, cfg, venue)
-            if movie_has_showtimes(page_html, cfg):
-                open_now[code] = {**venue, "url": url}
-                print(f"[venue] possible booking match: {venue['label']} ({code})", flush=True)
+            is_open, active_times = movie_has_showtimes(page_html, cfg)
+            if is_open:
+                open_now[code] = {**venue, "url": url, "showtimes": active_times}
+                print(f"[venue] BOOKABLE: {venue['label']} ({code}) — {', '.join(active_times)}", flush=True)
             else:
-                print(f"[venue] no matching showtimes: {venue['label']} ({code})", flush=True)
+                print(f"[venue] not bookable yet: {venue['label']} ({code})", flush=True)
         except requests.RequestException as exc:
             errors += 1
             print(f"[venue] check failed for {venue['label']} ({code}): {exc}", flush=True)
         time.sleep(float(cfg["request_delay_seconds"]))
 
-    # This diagnostic build must never send alerts or modify state.json.
-    print(f"[{label}] MARKUP DIAGNOSTIC ONLY: state.json unchanged; no Telegram alerts sent.", flush=True)
-    return 0 if checked else 1
+    if checked == 0:
+        print(f"[{label}] no venue pages were successfully checked; state not changed.", flush=True)
+        return 1
 
+    # On a fresh install, remember currently bookable venues and user-confirmed
+    # previously-open venues without sending an initial burst of alerts.
     if not state.get("initialized"):
-        if checked == 0:
-            print(f"[{label}] no cinema pages were successfully checked; baseline not initialized", flush=True)
-            return 1
         baseline = dict(open_now)
-        # The user already confirmed these venues had opened before this watcher
-        # was installed; suppress first-run duplicate alerts for them.
         for code in cfg.get("already_open_venue_codes", []):
             code = str(code).upper()
             if code in venues:
@@ -381,46 +458,31 @@ def main():
                     "url": f"https://in.bookmyshow.com/cinemas/{venues[code].get('city_path', cfg['city_slug'])}/{venues[code]['slug']}/buytickets/{code}/{date}",
                     "baseline_source": "user-confirmed already open",
                 })
-        state = {
-            "initialized": True,
-            "venues": baseline,
-            "checked_at": int(time.time()),
-        }
+        state = {"initialized": True, "venues": baseline, "checked_at": int(time.time())}
         save_json(STATE_PATH, state)
-        print(
-            f"[{label}] baseline initialized: {len(open_now)} matching theatre(s) "
-            f"from {checked} checked; {errors} errors. "
-            f"Pre-existing venues suppressed: {', '.join(str(x) for x in cfg.get('already_open_venue_codes', [])) or 'none'}. "
-            "No initial alerts sent.",
-            flush=True,
-        )
+        print(f"[{label}] baseline initialized: {len(baseline)} already-bookable theatre(s); no initial alerts sent.", flush=True)
         return 0
 
-    new_venues = [(code, v) for code, v in open_now.items() if code not in old_venues]
-    rd = date
-    pretty_date = f"{rd[6:8]}-{rd[4:6]}-{rd[0:4]}"
+    # Alert once per theatre. Keep old entries to prevent duplicate alerts if a
+    # page temporarily fails or BookMyShow briefly omits a showtime.
+    new_venues = [(code, venue) for code, venue in open_now.items() if code not in old_venues]
+    pretty_date = f"{date[6:8]}-{date[4:6]}-{date[0:4]}"
     for code, venue in new_venues:
         message = (
-            "🎬 Booking just OPENED!\n\n"
-            f"{cfg['movie']}\n"
+            "🎬 Avengers: Doomsday booking is OPEN!\n\n"
             f"Theatre: {venue['label']}\n"
-            f"Date: {pretty_date}\n\n"
+            f"Date: {pretty_date}\n"
+            f"Showtimes: {', '.join(venue.get('showtimes', []))}\n\n"
             f"Book here: {venue['url']}"
         )
         telegram(cfg, message)
         print(f"[alert] Telegram sent for {venue['label']} ({code})", flush=True)
 
-    # Keep previously seen entries to prevent duplicate alerts if a venue page
-    # temporarily stops returning data.
     old_venues.update(open_now)
     state.update({"initialized": True, "venues": old_venues, "checked_at": int(time.time())})
     save_json(STATE_PATH, state)
-    print(
-        f"[{label}] checked={checked}, open={len(open_now)}, "
-        f"new={len(new_venues)}, errors={errors}",
-        flush=True,
-    )
-    return 0 if checked else 1
+    print(f"[{label}] checked={checked}, bookable={len(open_now)}, new_alerts={len(new_venues)}, errors={errors}", flush=True)
+    return 0
 
 
 if __name__ == "__main__":
