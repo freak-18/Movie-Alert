@@ -239,7 +239,12 @@ def discover_venues(directory_html, cfg, session):
 
 
 def is_expected_venue_page(page_html, venue, requested_date):
-    """Require the exact venue/date breadcrumb, not a venue name in the footer."""
+    """Validate venue identity without requiring BMS to echo the full URL.
+
+    BMS sometimes omits the requested booking URL from returned HTML. The
+    fallback requires both the distinctive venue slug and venue code. A venue
+    name alone is not sufficient because it may appear in generic page content.
+    """
     city_path = str(venue.get("city_path", "coim")).strip("/")
     slug = str(venue.get("slug", "")).strip("/")
     code = str(venue.get("code", "")).upper()
@@ -247,9 +252,44 @@ def is_expected_venue_page(page_html, venue, requested_date):
     if not all((city_path, slug, code, date)):
         return False
 
-    raw = html.unescape(page_html).replace("\\/", "/").replace("\u002F", "/")
+    raw = html.unescape(page_html or "").replace("\\/", "/").replace("\\u002F", "/")
+    raw_lower = raw.casefold()
     expected_path = f"/cinemas/{city_path}/{slug}/buytickets/{code}/{date}"
-    return expected_path.casefold() in raw.casefold()
+    if expected_path.casefold() in raw_lower:
+        return True
+
+    visible = re.sub(r"<[^>]+>", " ", raw_lower)
+    visible = re.sub(r"\s+", " ", visible)
+    blocked_markers = (
+        "verify you are human", "checking your browser", "access denied",
+        "request blocked", "captcha", "temporarily blocked",
+        "unusual traffic", "enable javascript and cookies",
+    )
+    if any(marker in visible for marker in blocked_markers):
+        return False
+
+    # A full slug plus the exact venue code is stronger than a display name.
+    return slug.casefold() in raw_lower and re.search(
+        rf"(?<![A-Za-z0-9_-]){re.escape(code)}(?![A-Za-z0-9_-])",
+        raw,
+        flags=re.IGNORECASE,
+    ) is not None
+
+
+def debug_venue_response(page_html, venue, requested_date):
+    """Print concise evidence when a response cannot be identified as a venue page."""
+    raw = html.unescape(page_html or "").replace("\\/", "/").replace("\\u002F", "/")
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", raw, re.IGNORECASE | re.DOTALL)
+    page_title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else "No page title"
+    code = str(venue.get("code", ""))
+    slug = str(venue.get("slug", ""))
+    code_present = re.search(r"(?<![A-Za-z0-9_-])" + re.escape(code) + r"(?![A-Za-z0-9_-])", raw, re.I) is not None
+    print(f"[debug] {venue.get('label')} ({code}): page_chars={len(raw)}", flush=True)
+    print(f"[debug] page_title={page_title[:180]!r}", flush=True)
+    print(f"[debug] contains_venue_code={code_present}", flush=True)
+    print(f"[debug] contains_venue_slug={slug.casefold() in raw.casefold()}", flush=True)
+    print(f"[debug] contains_requested_date={str(requested_date) in raw}", flush=True)
+    print(f"[debug] response_start={re.sub(r'\s+', ' ', raw[:350])!r}", flush=True)
 
 
 class HtmlNode:
@@ -319,7 +359,8 @@ def movie_has_showtimes(page_html, cfg):
     parser = BookingMarkupParser()
     parser.feed(page_html)
     movie = _norm_text(cfg["movie"])
-    city_slug = str(cfg.get("city_slug", "coim")).strip("/").casefold()
+    city_slugs = {str(cfg.get("city_slug", "coim")).strip("/").casefold(), "coim", "coimbatore"}
+    city_route_pattern = "|".join(re.escape(value) for value in sorted(city_slugs) if value)
     title_anchors = []
 
     for node in _walk(parser.root):
@@ -328,7 +369,7 @@ def movie_has_showtimes(page_html, cfg):
         href = html.unescape(node.attrs.get("href", "")).replace("\\/", "/")
         path = urllib.parse.urlparse(href).path.casefold()
         # Excludes generic footer links such as /movies/<movie>/<id>.
-        if re.search(rf"/movies/{re.escape(city_slug)}/", path):
+        if re.search(rf"/movies/(?:{city_route_pattern})/", path):
             title_anchors.append(node)
 
     if not title_anchors:
@@ -444,7 +485,8 @@ def main():
             page_html = fetch_url(url, cfg, session)
             if not is_expected_venue_page(page_html, venue, date):
                 errors += 1
-                print(f"[venue] unexpected response (possibly blocked/error page): {venue['label']} ({code})", flush=True)
+                print(f"[venue] unexpected response (venue identity not confirmed): {venue['label']} ({code})", flush=True)
+                debug_venue_response(page_html, venue, date)
                 continue
             checked += 1
             is_open, active_times = movie_has_showtimes(page_html, cfg)
