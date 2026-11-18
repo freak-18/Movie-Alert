@@ -30,7 +30,17 @@
         "Book 08:05 PM",
         "Book 11:30 PM"
       ]
+    },
+    "BWCB": {
+      "label": "Broadway Cinemas",
+      "slug": "broadway-cinemas-coimbatore",
+      "code": "BWCB",
+      "city_path": "coim",
+      "url": "https://in.bookmyshow.com/cinemas/coim/broadway-cinemas-coimbatore/buytickets/BWCB/20261217",
+      "showtimes": [
+        "Book 10:10 AM"
+      ]
     }
   },
-  "checked_at": 1795002543
+  "checked_at": 1795003205
 }
