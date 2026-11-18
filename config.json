@@ -1,7 +1,7 @@
 {
-  "detector": "bms_date",
+  "detector": "bms_theatres",
   "movie": "Avengers: Doomsday",
   "requested_date": "20261217",
-  "url_template": "https://in.bookmyshow.com/movies/coimbatore/avengers-doomsday/buytickets/ET00439706/{date}",
-  "min_references": 10
+  "city_slug": "coimbatore",
+  "url_template": "https://in.bookmyshow.com/movies/coimbatore/avengers-doomsday/buytickets/ET00439706/{date}"
 }
