@@ -2,6 +2,50 @@
   "detector": "bms_theatres",
   "movie": "Avengers: Doomsday",
   "requested_date": "20261217",
-  "city_slug": "coimbatore",
-  "url_template": "https://in.bookmyshow.com/movies/coimbatore/avengers-doomsday/buytickets/ET00439706/{date}"
+  "city_slug": "coim",
+  "venue_list_url": "https://in.bookmyshow.com/coimbatore/venue-list",
+  "max_venues": 40,
+  "request_delay_seconds": 1.0,
+  "already_open_venue_codes": [
+    "KGCM",
+    "KGNR"
+  ],
+  "known_venues": [
+    {
+      "label": "KG Cinemas",
+      "slug": "kg-cinemas-coimbatore",
+      "code": "KGCM",
+      "city_path": "coim"
+    },
+    {
+      "label": "Karpagam Grandplex",
+      "slug": "karpagam-grandplex-sundarapuram",
+      "code": "KGNR",
+      "city_path": "coimbatore"
+    },
+    {
+      "label": "Broadway Cinemas",
+      "slug": "broadway-cinemas-coimbatore",
+      "code": "BWCB",
+      "city_path": "coim"
+    },
+    {
+      "label": "PVR Brookefields Mall",
+      "slug": "pvr-brookefields-mall-coimbatore",
+      "code": "PBMC",
+      "city_path": "coim"
+    },
+    {
+      "label": "PVR Alveal Fun Savvy Mall",
+      "slug": "pvr-alveal-fun-savvy-mall-coimbatore",
+      "code": "PFSC",
+      "city_path": "coim"
+    },
+    {
+      "label": "Karpagam Theatres",
+      "slug": "karpagam-theatres-4k-dolby-atmos-coimbatore",
+      "code": "KARP",
+      "city_path": "coim"
+    }
+  ]
 }
