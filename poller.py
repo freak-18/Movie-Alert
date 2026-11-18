@@ -290,6 +290,27 @@ def debug_page_evidence(page_html, cfg, venue):
     for snippet in found[:4]:
         print(f"[debug] date_context: {snippet}", flush=True)
 
+    # Raw markup is needed to distinguish a real showtime/booking card from
+    # generic movie text or a page-wide status legend. Keep output bounded.
+    raw_lower = page_html.lower()
+    raw_pos = raw_lower.find(movie)
+    if raw_pos >= 0:
+        raw_start = max(0, raw_pos - 1200)
+        raw_end = min(len(page_html), raw_pos + 4200)
+        raw_snippet = page_html[raw_start:raw_end]
+        # Avoid multiline log spam while preserving the HTML attributes/tags.
+        raw_snippet = re.sub(r"\s+", " ", raw_snippet)
+        print(f"[debug] raw_movie_markup: {raw_snippet}", flush=True)
+
+    # Show only booking-related links found near the movie title, if any.
+    if raw_pos >= 0:
+        nearby_raw = page_html[max(0, raw_pos - 1500):min(len(page_html), raw_pos + 6000)]
+        links = re.findall(r"<a\b[^>]*href=[\"\']([^\"\']+)[\"\'][^>]*>(.*?)</a>", nearby_raw, flags=re.IGNORECASE | re.DOTALL)
+        for href, label in links[:12]:
+            clean_label = re.sub(r"<[^>]+>", " ", label)
+            clean_label = re.sub(r"\s+", " ", html.unescape(clean_label)).strip()[:100]
+            print(f"[debug] nearby_link: label={clean_label!r} href={html.unescape(href)[:300]}", flush=True)
+
 def main():
     cfg = load_config()
     label = f"{cfg['movie']} @ {cfg['requested_date']}"
@@ -342,7 +363,7 @@ def main():
         time.sleep(float(cfg["request_delay_seconds"]))
 
     # This diagnostic build must never send alerts or modify state.json.
-    print(f"[{label}] DIAGNOSTIC ONLY: state.json unchanged; no Telegram alerts sent.", flush=True)
+    print(f"[{label}] MARKUP DIAGNOSTIC ONLY: state.json unchanged; no Telegram alerts sent.", flush=True)
     return 0 if checked else 1
 
     if not state.get("initialized"):
