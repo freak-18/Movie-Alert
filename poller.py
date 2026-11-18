@@ -238,18 +238,18 @@ def discover_venues(directory_html, cfg, session):
 
 
 
-def is_expected_venue_page(page_html, venue):
-    """Reject generic anti-bot/error pages before treating a request as checked."""
-    text = html.unescape(re.sub(r"<[^>]+>", " ", page_html))
-    text = re.sub(r"\s+", " ", text).lower()
-    label = re.sub(r"\s+", " ", venue.get("label", "")).strip().lower()
-    if label and label in text:
-        return True
-    # Some BMS pages vary punctuation/branding; accept a distinctive slug token.
-    ignored = {"cinemas", "cinema", "coimbatore", "mall", "theatres", "theatre", "grandplex"}
-    tokens = [t for t in re.split(r"[^a-z0-9]+", venue.get("slug", "").lower())
-              if len(t) >= 4 and t not in ignored]
-    return any(token in text for token in tokens)
+def is_expected_venue_page(page_html, venue, requested_date):
+    """Require the exact venue/date breadcrumb, not a venue name in the footer."""
+    city_path = str(venue.get("city_path", "coim")).strip("/")
+    slug = str(venue.get("slug", "")).strip("/")
+    code = str(venue.get("code", "")).upper()
+    date = str(requested_date)
+    if not all((city_path, slug, code, date)):
+        return False
+
+    raw = html.unescape(page_html).replace("\\/", "/").replace("\u002F", "/")
+    expected_path = f"/cinemas/{city_path}/{slug}/buytickets/{code}/{date}"
+    return expected_path.casefold() in raw.casefold()
 
 
 class HtmlNode:
@@ -309,48 +309,64 @@ def _norm_text(value):
 
 
 def movie_has_showtimes(page_html, cfg):
-    """Return true only when the requested movie card has an enabled Book button.
+    """Detect enabled showtimes only inside the requested movie's own card.
 
-    BookMyShow's page URL is already scoped to the requested date. Within that
-    page, identify the movie title anchor and inspect its containing card for
-    enabled role=button elements labelled 'Book <time>'. Disabled buttons
-    (aria-disabled=true or tabindex=-1) are deliberately ignored.
+    BookMyShow's footer contains generic movie links. Those links do not use
+    the city-scoped /movies/<city>/... route used by the actual venue movie
+    card. We therefore require that route and inspect only the title's parent
+    and grandparent (the observed movie-card wrapper), never page-wide parents.
     """
     parser = BookingMarkupParser()
     parser.feed(page_html)
     movie = _norm_text(cfg["movie"])
+    city_slug = str(cfg.get("city_slug", "coim")).strip("/").casefold()
     title_anchors = []
+
     for node in _walk(parser.root):
-        if node.tag.lower() == "a" and movie in _norm_text(node.text_content()):
+        if node.tag.lower() != "a" or movie not in _norm_text(node.text_content()):
+            continue
+        href = html.unescape(node.attrs.get("href", "")).replace("\\/", "/")
+        path = urllib.parse.urlparse(href).path.casefold()
+        # Excludes generic footer links such as /movies/<movie>/<id>.
+        if re.search(rf"/movies/{re.escape(city_slug)}/", path):
             title_anchors.append(node)
 
     if not title_anchors:
         return False, []
 
-    # Prefer the movie title link that belongs to a card containing showtime
-    # buttons. This avoids matching the footer's generic movie listing.
     time_re = re.compile(r"^Book\s+(?:0?[1-9]|1[0-2]):[0-5]\d\s*(?:AM|PM)$", re.I)
     for anchor in title_anchors:
-        ancestor = anchor.parent
-        while ancestor is not None:
+        # Observed BMS structure: anchor -> title wrapper -> movie-card wrapper.
+        # Do not climb higher: page-level ancestors contain unrelated showtimes.
+        containers = []
+        parent = anchor.parent
+        for _ in range(2):
+            if parent is None:
+                break
+            containers.append(parent)
+            parent = parent.parent
+
+        for container in containers:
             buttons = []
-            for child in _walk(ancestor):
+            for child in _walk(container):
                 attrs = child.attrs
-                label = attrs.get("aria-label", "")
+                label = attrs.get("aria-label", "").strip()
                 if child.tag.lower() not in {"div", "button"}:
                     continue
                 if attrs.get("role", "").lower() != "button" and child.tag.lower() != "button":
                     continue
-                if not time_re.match(label.strip()):
+                if not time_re.fullmatch(label):
                     continue
-                disabled = attrs.get("aria-disabled", "").lower() == "true"
-                tabindex = attrs.get("tabindex")
-                disabled = disabled or tabindex == "-1" or "disabled" in attrs
+                disabled = (
+                    attrs.get("aria-disabled", "").lower() == "true"
+                    or attrs.get("tabindex") == "-1"
+                    or "disabled" in attrs
+                )
                 if not disabled:
-                    buttons.append(label.strip())
+                    buttons.append(label)
             if buttons:
-                return True, buttons
-            ancestor = ancestor.parent
+                return True, list(dict.fromkeys(buttons))
+
     return False, []
 
 
@@ -426,15 +442,12 @@ def main():
         url = f"https://in.bookmyshow.com/cinemas/{city_path}/{venue['slug']}/buytickets/{code}/{date}"
         try:
             page_html = fetch_url(url, cfg, session)
-            if not is_expected_venue_page(page_html, venue):
+            if not is_expected_venue_page(page_html, venue, date):
                 errors += 1
                 print(f"[venue] unexpected response (possibly blocked/error page): {venue['label']} ({code})", flush=True)
                 continue
             checked += 1
             is_open, active_times = movie_has_showtimes(page_html, cfg)
-            # Temporary diagnostics for the two venues that produced false alerts.
-            if code in {"KARP", "PFSC"}:
-                debug_page_evidence(page_html, cfg, venue)
             if is_open:
                 open_now[code] = {**venue, "url": url, "showtimes": active_times}
                 print(f"[venue] BOOKABLE: {venue['label']} ({code}) — {', '.join(active_times)}", flush=True)
