@@ -25,7 +25,6 @@
       "city_path": "coim",
       "url": "https://in.bookmyshow.com/cinemas/coim/pvr-brookefields-mall-coimbatore/buytickets/PBMC/20261217",
       "showtimes": [
-        "Book 01:05 PM",
         "Book 04:35 PM",
         "Book 08:05 PM",
         "Book 11:30 PM"
@@ -42,5 +41,5 @@
       ]
     }
   },
-  "checked_at": 1795029049
+  "checked_at": 1795050744
 }
