@@ -100,20 +100,48 @@ def load_config():
 
 
 def fetch_url(url, cfg, session):
+    """Fetch a BookMyShow page through ZenRows.
+
+    Requires ZENROWS_API_KEY in the environment. Keep the request simple by
+    default; enable JavaScript rendering only if live-page testing proves it
+    is necessary because it consumes more credits.
+    """
+    zenrows_key = os.environ.get("ZENROWS_API_KEY", "").strip()
+    if not zenrows_key:
+        raise RuntimeError(
+            "Missing ZENROWS_API_KEY. Add it to GitHub Actions Secrets and "
+            "pass it to the workflow environment."
+        )
+
     headers = dict(HEADERS)
     headers.update(cfg.get("headers", {}))
-    scraper_key = os.environ.get("SCRAPERAPI_KEY")
-    if scraper_key:
-        api_url = "https://api.scraperapi.com/?" + urllib.parse.urlencode({
-            "api_key": scraper_key,
-            "country_code": "in",
-            "url": url,
-        })
-        response = session.get(api_url, headers=HEADERS, timeout=90)
-    else:
-        proxy = os.environ.get("PROXY_URL")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
-        response = session.get(url, headers=headers, proxies=proxies, timeout=45)
+    params = {
+        "apikey": zenrows_key,
+        "url": url,
+    }
+
+    # Optional settings can be enabled in config.json if required. Avoid
+    # JavaScript rendering/premium proxies until the basic request is tested.
+    if cfg.get("zenrows_js_render"):
+        params["js_render"] = "true"
+    if cfg.get("zenrows_country"):
+        params["country"] = str(cfg["zenrows_country"]).lower()
+
+    response = session.get(
+        "https://api.zenrows.com/v1/",
+        params=params,
+        headers=headers,
+        timeout=90,
+    )
+    if response.status_code == 401:
+        raise requests.HTTPError(
+            "ZenRows returned 401: check ZENROWS_API_KEY.", response=response
+        )
+    if response.status_code == 403:
+        raise requests.HTTPError(
+            "ZenRows returned 403: check account access, plan limits, and API settings.",
+            response=response,
+        )
     response.raise_for_status()
     return response.text
 
