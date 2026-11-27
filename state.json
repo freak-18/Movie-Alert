@@ -8,8 +8,7 @@
       "city_path": "coim",
       "url": "https://in.bookmyshow.com/cinemas/coim/kg-cinemas-coimbatore/buytickets/KGCM/20261217",
       "showtimes": [
-        "Book 04:25 PM",
-        "Book 07:40 PM"
+        "Book 09:30 AM"
       ]
     },
     "KGNR": {
@@ -40,5 +39,5 @@
       ]
     }
   },
-  "checked_at": 1795670052
+  "checked_at": 1795772687
 }
