@@ -133,16 +133,21 @@ def fetch_url(url, cfg, session):
         headers=headers,
         timeout=90,
     )
-    if response.status_code == 401:
+    if not response.ok:
+        # Include ZenRows' response body so errors such as HTTP 422 explain
+        # which request parameter or account setting needs attention.
+        details = (response.text or "").strip()[:1500] or "(empty response body)"
+        hint = ""
+        if response.status_code == 401:
+            hint = " Check that ZENROWS_API_KEY is correct."
+        elif response.status_code == 403:
+            hint = " Check account access, plan limits, and API settings."
         raise requests.HTTPError(
-            "ZenRows returned 401: check ZENROWS_API_KEY.", response=response
-        )
-    if response.status_code == 403:
-        raise requests.HTTPError(
-            "ZenRows returned 403: check account access, plan limits, and API settings.",
+            f"ZenRows returned HTTP {response.status_code}.{hint} "
+            f"Response: {details}",
             response=response,
         )
-    response.raise_for_status()
+
     return response.text
 
 
