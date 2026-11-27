@@ -6,6 +6,7 @@
   "venue_list_url": "https://in.bookmyshow.com/coimbatore/venue-list",
   "max_venues": 40,
   "request_delay_seconds": 1.0,
+  "zenrows_js_render": true,
   "already_open_venue_codes": [
     "KGCM",
     "KGNR"
